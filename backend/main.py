@@ -1,24 +1,40 @@
 from fastapi import FastAPI, Request, HTTPException, Form
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional
 from datetime import datetime
+from pathlib import Path
+import json
+import os
+import pdfkit
+from twilio.rest import Client as TwilioClient
 
 from .database import (
     init_db,
     upsert_client,
     add_task,
+    add_voucher,
     update_sync,
     get_clients,
     get_pending_tasks,
     get_rejected_tasks,
     get_client_by_token,
+    get_voucher,
 )
 
 app = FastAPI()
 
 templates = Jinja2Templates(directory=str((__file__).rsplit('/',1)[0]+"/templates"))
 conn = init_db()
+
+# Directory for storing generated invoices
+INVOICE_DIR = Path(__file__).parent / "invoices"
+INVOICE_DIR.mkdir(exist_ok=True)
+
+# Twilio configuration from environment variables
+TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
 
 REQUIRED_FIELDS = {"vchtype", "date", "party", "amount"}
 
@@ -61,7 +77,8 @@ async def upload_voucher(
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid JSON")
     task_id = add_task(conn, client_id, payload, data_type, status=status, missing_fields=missing_fields)
-    return {"task_id": task_id, "status": status}
+    voucher_id = add_voucher(conn, client_id, payload)
+    return {"task_id": task_id, "voucher_id": voucher_id, "status": status}
 
 
 @app.get("/tasks")
@@ -100,4 +117,45 @@ async def dashboard(request: Request):
             "rejected": reject_map,
         },
     )
+
+
+def generate_invoice(voucher_row) -> Path:
+    """Render invoice HTML and convert to PDF."""
+    pdf_path = INVOICE_DIR / f"{voucher_row['id']}.pdf"
+    if pdf_path.exists():
+        return pdf_path
+    html_content = templates.get_template("invoice.html").render(
+        voucher=dict(voucher_row)
+    )
+    pdfkit.from_string(html_content, str(pdf_path))
+    return pdf_path
+
+
+@app.get("/invoice/{voucher_id}")
+async def get_invoice(voucher_id: int):
+    voucher = get_voucher(conn, voucher_id)
+    if not voucher:
+        raise HTTPException(status_code=404, detail="Voucher not found")
+    pdf_path = generate_invoice(voucher)
+    return FileResponse(path=pdf_path, filename=f"invoice_{voucher_id}.pdf", media_type="application/pdf")
+
+
+@app.post("/send_invoice/{voucher_id}")
+async def send_invoice(voucher_id: int, phone: str = Form(...)):
+    """Send the invoice PDF to the provided WhatsApp number via Twilio."""
+    voucher = get_voucher(conn, voucher_id)
+    if not voucher:
+        raise HTTPException(status_code=404, detail="Voucher not found")
+    pdf_path = generate_invoice(voucher)
+    if not (TWILIO_SID and TWILIO_TOKEN and TWILIO_WHATSAPP_NUMBER):
+        raise HTTPException(status_code=500, detail="Twilio not configured")
+    client = TwilioClient(TWILIO_SID, TWILIO_TOKEN)
+    message = client.messages.create(
+        from_=f"whatsapp:{TWILIO_WHATSAPP_NUMBER}",
+        to=f"whatsapp:{phone}",
+        body="Here is your invoice",
+        media_url=[f"file://{pdf_path}"]
+    )
+    return {"sid": message.sid}
+
 
