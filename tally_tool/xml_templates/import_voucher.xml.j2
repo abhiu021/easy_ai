@@ -1,0 +1,33 @@
+
+<ENVELOPE>
+  <HEADER>
+    <TALLYREQUEST>Import Data</TALLYREQUEST>
+  </HEADER>
+  <BODY>
+    <IMPORTDATA>
+      <REQUESTDESC>
+        <REPORTNAME>Vouchers</REPORTNAME>
+      </REQUESTDESC>
+      <REQUESTDATA>
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <VOUCHER VCHTYPE="{{ vchtype }}" ACTION="Create">
+            <DATE>{{ date }}</DATE>
+            <PARTYLEDGERNAME>{{ party }}</PARTYLEDGERNAME>
+            <VOUCHERTYPENAME>{{ vchtype }}</VOUCHERTYPENAME>
+            <NARRATION>Sales transaction</NARRATION>
+            <ALLLEDGERENTRIES.LIST>
+              <LEDGERNAME>{{ ledger_name }}</LEDGERNAME>
+              <ISDEEMEDPOSITIVE>{{ is_deemed_positive }}</ISDEEMEDPOSITIVE>
+              <AMOUNT>{{ amount }}</AMOUNT>
+            </ALLLEDGERENTRIES.LIST>
+            <ALLLEDGERENTRIES.LIST>
+              <LEDGERNAME>{{ party }}</LEDGERNAME>
+              <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+              <AMOUNT>-{{ amount }}</AMOUNT>
+            </ALLLEDGERENTRIES.LIST>
+          </VOUCHER>
+        </TALLYMESSAGE>
+      </REQUESTDATA>
+    </IMPORTDATA>
+  </BODY>
+</ENVELOPE>
