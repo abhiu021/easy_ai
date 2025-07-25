@@ -53,7 +53,7 @@ def process_message(user_text: str) -> str:
                 "payload": result,
             },
         )
-    except requests.HTTPError:
+    except requests.RequestException:
         pass
     return result
 
