@@ -9,7 +9,7 @@ import os
 import pdfkit
 import requests
 from twilio.rest import Client as TwilioClient
-from .agent_helper import process_text
+from agent.tally_agent import process_message
 
 from .database import (
     init_db,
@@ -183,7 +183,7 @@ async def gupshup_webhook(request: Request):
         raise HTTPException(status_code=400, detail="Invalid payload")
 
     # Process the incoming text with the agent
-    reply = await process_text(message)
+    reply = process_message(message)
 
     if not (GUPSHUP_API_KEY and GUPSHUP_SOURCE):
         raise HTTPException(status_code=500, detail="Gupshup not configured")
