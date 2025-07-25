@@ -13,6 +13,10 @@ from agent.utils.queue import WriteQueue
 # Load environment variables
 load_dotenv()
 
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+CLIENT_ID = os.getenv("CLIENT_ID", "demo")
+CLIENT_TOKEN = os.getenv("CLIENT_TOKEN")
+
 # Set OpenRouter variables
 os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
 os.environ["OPENAI_API_BASE"] = os.getenv("OPENAI_API_BASE")  # Needed for OpenRouter
@@ -36,6 +40,17 @@ prompt = PromptTemplate(
 
 # LangChain LLMChain
 chain = prompt | llm
+
+
+def backend_post(route: str, data: dict) -> requests.Response:
+    """Helper to POST to the backend with the auth token."""
+    headers = {}
+    if CLIENT_TOKEN:
+        headers["Authorization"] = f"Bearer {CLIENT_TOKEN}"
+    url = f"{BACKEND_URL}{route}"
+    resp = requests.post(url, data=data, headers=headers)
+    resp.raise_for_status()
+    return resp
 
 
 def is_tally_reachable() -> bool:
@@ -92,6 +107,17 @@ def run_agent():
 
         result = chain.invoke({"user_input": user_input})
         print("\n🧾 Extracted JSON:\n", result)
+        try:
+            backend_post(
+                "/upload_voucher",
+                {
+                    "client_id": CLIENT_ID,
+                    "data_type": "json",
+                    "payload": result,
+                },
+            )
+        except requests.HTTPError as exc:
+            print("Failed to upload voucher:", exc)
 
 if __name__ == "__main__":
     run_agent()

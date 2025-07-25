@@ -4,6 +4,8 @@ from typing import Optional, Dict, Any
 
 DB_PATH = Path(__file__).parent / "backend.db"
 
+import secrets
+
 # Ensure database tables exist
 def init_db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
@@ -15,7 +17,8 @@ def init_db() -> sqlite3.Connection:
                 client_id TEXT PRIMARY KEY,
                 company_name TEXT,
                 last_sync TEXT,
-                last_tally_access TEXT
+                last_tally_access TEXT,
+                token TEXT NOT NULL UNIQUE
             )
             """
         )
@@ -36,10 +39,12 @@ def init_db() -> sqlite3.Connection:
     return conn
 
 # Simple helper to upsert a client
-def upsert_client(conn: sqlite3.Connection, client_id: str, company_name: Optional[str] = None) -> None:
+def upsert_client(
+    conn: sqlite3.Connection, client_id: str, company_name: Optional[str] = None
+) -> str:
     with conn:
         cur = conn.execute(
-            "SELECT client_id FROM clients WHERE client_id=?", (client_id,)
+            "SELECT token FROM clients WHERE client_id=?", (client_id,)
         )
         row = cur.fetchone()
         if row:
@@ -48,11 +53,14 @@ def upsert_client(conn: sqlite3.Connection, client_id: str, company_name: Option
                     "UPDATE clients SET company_name=? WHERE client_id=?",
                     (company_name, client_id),
                 )
+            return row["token"]
         else:
+            token = secrets.token_hex(16)
             conn.execute(
-                "INSERT INTO clients (client_id, company_name) VALUES (?, ?)",
-                (client_id, company_name),
+                "INSERT INTO clients (client_id, company_name, token) VALUES (?, ?, ?)",
+                (client_id, company_name, token),
             )
+            return token
 
 def update_sync(conn: sqlite3.Connection, client_id: str, last_sync: str, tally_access_ok: bool) -> None:
     with conn:
@@ -66,15 +74,28 @@ def update_sync(conn: sqlite3.Connection, client_id: str, last_sync: str, tally_
                 (last_sync, client_id),
             )
 
+def get_client_by_token(conn: sqlite3.Connection, token: str) -> Optional[sqlite3.Row]:
+    cur = conn.execute(
+        "SELECT client_id, token FROM clients WHERE token=?",
+        (token,),
+    )
+    return cur.fetchone()
+
 def get_clients(conn: sqlite3.Connection):
     cur = conn.execute(
         "SELECT client_id, company_name, last_sync, last_tally_access FROM clients ORDER BY client_id"
     )
     return cur.fetchall()
 
-def get_pending_tasks(conn: sqlite3.Connection):
+def get_pending_tasks(conn: sqlite3.Connection, client_id: str):
     cur = conn.execute(
-        "SELECT id, client_id, voucher_data, data_type, created_at FROM tasks WHERE status='pending' ORDER BY created_at"
+        """
+        SELECT id, client_id, voucher_data, data_type, created_at
+        FROM tasks
+        WHERE status='pending' AND client_id=?
+        ORDER BY created_at
+        """,
+        (client_id,),
     )
     return cur.fetchall()
 
