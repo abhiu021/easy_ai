@@ -9,3 +9,4 @@ uvicorn>=0.20
 python-multipart>=0.0.5
 pdfkit>=1.0.0
 twilio>=7.0.0
+requests>=2.0
