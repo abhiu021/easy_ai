@@ -1,5 +1,7 @@
 
-from client import TallyClient
+"""Convenience wrappers for rendering and posting common Tally XML templates."""
+
+from .client import TallyClient
 
 tally = TallyClient()
 
@@ -70,3 +72,21 @@ def get_specific_voucher(voucher_no, voucher_type="Sales"):
     with open(f"specific_voucher_{voucher_no}.xml", "w") as f:
         f.write(response)
     return f"Specific voucher {voucher_no} saved to specific_voucher_{voucher_no}.xml"
+
+
+def get_outstanding_receivables(from_date: str, to_date: str) -> str:
+    """Return the Outstanding Receivables report as XML."""
+    xml = tally.render_template(
+        "fetch_report.xml.j2",
+        {"report_name": "Outstanding Receivables", "from_date": from_date, "to_date": to_date},
+    )
+    return tally.post_xml(xml)
+
+
+def get_day_book(from_date: str, to_date: str) -> str:
+    """Return the Day Book report for the provided date range."""
+    xml = tally.render_template(
+        "fetch_report.xml.j2",
+        {"report_name": "Day Book", "from_date": from_date, "to_date": to_date},
+    )
+    return tally.post_xml(xml)
