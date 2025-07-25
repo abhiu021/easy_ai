@@ -4,7 +4,16 @@ from fastapi.templating import Jinja2Templates
 from typing import Optional
 from datetime import datetime
 
-from .database import init_db, upsert_client, add_task, update_sync, get_clients, get_pending_tasks, get_rejected_tasks
+from .database import (
+    init_db,
+    upsert_client,
+    add_task,
+    update_sync,
+    get_clients,
+    get_pending_tasks,
+    get_rejected_tasks,
+    get_client_by_token,
+)
 
 app = FastAPI()
 
@@ -13,14 +22,30 @@ conn = init_db()
 
 REQUIRED_FIELDS = {"vchtype", "date", "party", "amount"}
 
+
+def authenticate(request: Request) -> str:
+    """Validate the Authorization header and return the client_id."""
+    auth = request.headers.get("Authorization")
+    if not auth or not auth.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing token")
+    token = auth.split(" ", 1)[1]
+    client = get_client_by_token(conn, token)
+    if not client:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return client["client_id"]
+
 @app.post("/upload_voucher")
 async def upload_voucher(
+    request: Request,
     client_id: str = Form(...),
     data_type: str = Form("json"),
     company_name: Optional[str] = Form(None),
     payload: str = Form(...),
 ):
     """Receive voucher data and store as a task."""
+    auth_client = authenticate(request)
+    if auth_client != client_id:
+        raise HTTPException(status_code=403, detail="Token does not match client")
     upsert_client(conn, client_id, company_name)
     status = "pending"
     missing_fields = None
@@ -40,18 +65,20 @@ async def upload_voucher(
 
 
 @app.get("/tasks")
-async def get_tasks():
-    tasks = get_pending_tasks(conn)
+async def get_tasks(request: Request):
+    client_id = authenticate(request)
+    tasks = get_pending_tasks(conn, client_id)
     return [dict(t) for t in tasks]
 
 
 @app.post("/sync_status")
-async def sync_status(data: dict):
-    client_id = data.get("client_id")
+async def sync_status(request: Request, data: dict):
+    auth_client = authenticate(request)
+    client_id = data.get("client_id") or auth_client
+    if client_id != auth_client:
+        raise HTTPException(status_code=403, detail="Token does not match client")
     last_sync = data.get("last_sync") or datetime.utcnow().isoformat()
     tally_ok = bool(data.get("tally_access_ok"))
-    if not client_id:
-        raise HTTPException(status_code=400, detail="client_id required")
     upsert_client(conn, client_id)
     update_sync(conn, client_id, last_sync, tally_ok)
     return {"status": "ok"}
