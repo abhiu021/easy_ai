@@ -5,9 +5,9 @@ import requests
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
-from tally_agent_prompt import prompt_template
+from .tally_agent_prompt import prompt_template
 from tally_tool.client import TallyClient
-from agent.utils.queue import WriteQueue
+from .utils.queue import WriteQueue
 
 # Load environment variables
 load_dotenv()
