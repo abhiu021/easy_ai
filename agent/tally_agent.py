@@ -4,7 +4,6 @@ import threading
 import requests
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
 from dotenv import load_dotenv
 from tally_agent_prompt import prompt_template
 from tally_tool.client import TallyClient
@@ -38,8 +37,25 @@ prompt = PromptTemplate(
     template=prompt_template
 )
 
-# LangChain LLMChain
+# LangChain chain
 chain = prompt | llm
+
+
+def process_message(user_text: str) -> str:
+    """Run the LLM chain on the provided text and upload the result."""
+    result = chain.invoke({"user_input": user_text})
+    try:
+        backend_post(
+            "/upload_voucher",
+            {
+                "client_id": CLIENT_ID,
+                "data_type": "json",
+                "payload": result,
+            },
+        )
+    except requests.HTTPError:
+        pass
+    return result
 
 
 def backend_post(route: str, data: dict) -> requests.Response:
@@ -105,19 +121,8 @@ def run_agent():
                 print("\n🧾 XML queued for later sending.")
             continue
 
-        result = chain.invoke({"user_input": user_input})
+        result = process_message(user_input)
         print("\n🧾 Extracted JSON:\n", result)
-        try:
-            backend_post(
-                "/upload_voucher",
-                {
-                    "client_id": CLIENT_ID,
-                    "data_type": "json",
-                    "payload": result,
-                },
-            )
-        except requests.HTTPError as exc:
-            print("Failed to upload voucher:", exc)
 
 if __name__ == "__main__":
     run_agent()
