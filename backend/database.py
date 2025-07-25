@@ -36,6 +36,18 @@ def init_db() -> sqlite3.Connection:
             )
             """
         )
+        # Store uploaded voucher details for invoice generation
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS vouchers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_id TEXT NOT NULL,
+                voucher_data TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(client_id) REFERENCES clients(client_id)
+            )
+            """
+        )
     return conn
 
 # Simple helper to upsert a client
@@ -109,6 +121,22 @@ def add_task(conn: sqlite3.Connection, client_id: str, voucher_data: str, data_t
             (client_id, voucher_data, data_type, status, missing_fields),
         )
         return cur.lastrowid
+
+def add_voucher(conn: sqlite3.Connection, client_id: str, voucher_data: str) -> int:
+    """Insert a voucher record for invoice generation"""
+    with conn:
+        cur = conn.execute(
+            "INSERT INTO vouchers (client_id, voucher_data) VALUES (?, ?)",
+            (client_id, voucher_data),
+        )
+        return cur.lastrowid
+
+def get_voucher(conn: sqlite3.Connection, voucher_id: int) -> Optional[sqlite3.Row]:
+    cur = conn.execute(
+        "SELECT id, client_id, voucher_data, created_at FROM vouchers WHERE id=?",
+        (voucher_id,),
+    )
+    return cur.fetchone()
 
 def get_rejected_tasks(conn: sqlite3.Connection):
     cur = conn.execute(
