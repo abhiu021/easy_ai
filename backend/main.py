@@ -7,7 +7,9 @@ from pathlib import Path
 import json
 import os
 import pdfkit
+import requests
 from twilio.rest import Client as TwilioClient
+from .agent_helper import process_text
 
 from .database import (
     init_db,
@@ -35,6 +37,12 @@ INVOICE_DIR.mkdir(exist_ok=True)
 TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
+
+# Gupshup configuration
+GUPSHUP_API_BASE = os.getenv("GUPSHUP_API_BASE", "https://api.gupshup.io")
+GUPSHUP_API_KEY = os.getenv("GUPSHUP_API_KEY")
+GUPSHUP_SOURCE = os.getenv("GUPSHUP_SOURCE")
+GUPSHUP_SRC_NAME = os.getenv("GUPSHUP_SRC_NAME")
 
 REQUIRED_FIELDS = {"vchtype", "date", "party", "amount"}
 
@@ -157,5 +165,41 @@ async def send_invoice(voucher_id: int, phone: str = Form(...)):
         media_url=[f"file://{pdf_path}"]
     )
     return {"sid": message.sid}
+
+
+@app.post("/gupshup")
+async def gupshup_webhook(request: Request):
+    """Receive Gupshup webhook and respond using the agent."""
+    data = await request.json()
+    # Extract message text and sender number
+    message = (
+        data.get("payload", {})
+        .get("payload", {})
+        .get("text")
+        or data.get("text")
+    )
+    sender = data.get("payload", {}).get("source")
+    if not message or not sender:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+
+    # Process the incoming text with the agent
+    reply = await process_text(message)
+
+    if not (GUPSHUP_API_KEY and GUPSHUP_SOURCE):
+        raise HTTPException(status_code=500, detail="Gupshup not configured")
+
+    url = f"{GUPSHUP_API_BASE}/api/v1/msg"
+    headers = {"apikey": GUPSHUP_API_KEY}
+    payload = {
+        "channel": "whatsapp",
+        "source": GUPSHUP_SOURCE,
+        "destination": sender,
+        "message": reply,
+    }
+    if GUPSHUP_SRC_NAME:
+        payload["src.name"] = GUPSHUP_SRC_NAME
+    resp = requests.post(url, data=payload, headers=headers)
+    resp.raise_for_status()
+    return {"status": "ok"}
 
 
