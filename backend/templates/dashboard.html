@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Client Dashboard</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>Client Dashboard</h1>
+    <table>
+        <tr>
+            <th>Client ID</th>
+            <th>Company Name</th>
+            <th>Last Sync</th>
+            <th>Last Tally Access</th>
+            <th>Missing Fields / Rejected Inserts</th>
+        </tr>
+        {% for c in clients %}
+        <tr>
+            <td>{{ c['client_id'] }}</td>
+            <td>{{ c['company_name'] or '' }}</td>
+            <td>{{ c['last_sync'] or '' }}</td>
+            <td>{{ c['last_tally_access'] or '' }}</td>
+            <td>
+                {% if rejected.get(c['client_id']) %}
+                    {{ ', '.join(rejected[c['client_id']]) }}
+                {% else %}
+                    
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
