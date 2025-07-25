@@ -35,3 +35,17 @@ CLIENT_TOKEN=<generated_token>
 
 When the agent makes a request to the backend it automatically includes
 `CLIENT_TOKEN` in the `Authorization` header.
+
+## Manual testing
+
+The repository provides a small helper script for experimenting with the agent
+without running the interactive CLI. Pipe any text into `tests/manual_test.py`
+and it will output the processed JSON and show if any XML messages were queued:
+
+```bash
+python tests/manual_test.py <<< "Create an invoice for $50"  
+# or use echo
+echo "Create an invoice for $50" | python tests/manual_test.py
+```
+
+If posting XML to Tally fails, the script prints the number of queued items.
